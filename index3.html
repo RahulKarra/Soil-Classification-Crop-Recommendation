@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Soil Classification and Crop Recommendation</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Chart.js for Crop Confidence Graph -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #27ae60;
+            --background-color: #f8f9fa;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-color);
+            margin: 0;
+            padding: 0;
+        }
+
+        .navbar {
+            background-color: var(--primary-color);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .navbar-brand, .nav-link {
+            color: white !important;
+            font-weight: 600;
+        }
+
+        .nav-link:hover {
+            color: var(--secondary-color) !important;
+        }
+
+        .hero-section {
+            position: relative;
+            height: 100vh;
+            background: url("/static/Backgroundimage.jpg") no-repeat center center/cover;
+            filter: blur(0px); 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1;
+        }
+
+        .hero-text {
+            position: relative;
+            z-index: 2;
+            color: white;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+        }
+
+        .hero-text h1 {
+            font-size: 3.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+
+        .section {
+            padding: 4rem 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .section h2 {
+            color: var(--primary-color);
+            margin-bottom: 2rem;
+            font-weight: bold;
+        }
+
+        .card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            background: white;
+            padding: 2rem;
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .form-control {
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            padding: 0.75rem;
+        }
+
+        .form-control:focus {
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 0.2rem rgba(39, 174, 96, 0.25);
+        }
+
+        .btn-primary {
+            background-color: var(--secondary-color);
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background-color: #219a52;
+            transform: translateY(-2px);
+        }
+
+        .prediction-result {
+            border-radius: 15px;
+            padding: 2rem;
+            margin-top: 2rem;
+            display: none;
+        }
+
+        .result-card {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .confidence-bar {
+            height: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .confidence-level {
+            height: 100%;
+            background-color: var(--secondary-color);
+            border-radius: 5px;
+            transition: width 0.6s ease;
+        }
+
+        #imagePreview img {
+            max-width: 100%;
+            border-radius: 10px;
+            margin-top: 1rem;
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .highlight-crop {
+            background-color: #d4edda;
+            border: 2px solid #28a745;
+        }
+
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loading-spinner {
+            color: white;
+            font-size: 2rem;
+        }
+
+        .dropdown-menu {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .dropdown-item {
+            color: var(--primary-color);
+            padding: 0.75rem 1.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .dropdown-item:hover {
+            background-color: #f8f9fa;
+            color: var(--secondary-color);
+        }
+
+        .dropdown-toggle::after {
+            margin-left: 0.3em;
+            vertical-align: 0.15em;
+        }
+
+        .info-box {
+            display: flex;
+            align-items: center;
+            background-color: #e9f7ef;
+            border-left: 5px solid var(--secondary-color);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+
+        .info-box i {
+            font-size: 1.5rem;
+            color: var(--secondary-color);
+            margin-right: 1rem;
+        }
+
+        .info-box p {
+            margin: 0;
+            font-size: 1rem;
+            color: #333;
+        }
+
+        .crop-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .crop-item:last-child {
+            border-bottom: none;
+        }
+
+        .crop-details {
+            flex: 1;
+        }
+
+        .crop-details p {
+            margin: 0;
+            font-size: 0.95rem;
+        }
+
+        .crop-details .crop-name {
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .crop-details .crop-meta {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .crop-badge {
+            background-color: var(--secondary-color);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 768px) {
+            .hero-text h1 {
+                font-size: 2rem;
+            }
+            .navbar-brand {
+                font-size: 1.2rem;
+            }
+            .section {
+                padding: 2rem 1rem;
+            }
+            .btn-primary {
+                width: 100%;
+            }
+            .crop-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .crop-badge {
+                margin-top: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#home"><i class="fas fa-seedling me-2"></i>Soil & Crop System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item"><a class="nav-link" href="#home">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#about">About</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#prediction">Test</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#data">Data</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#contact">Contact Us</a></li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="languageDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-language me-1"></i> Language
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="languageDropdown">
+                            <li><a class="dropdown-item" href="#" data-lang="en">English</a></li>
+                            <li><a class="dropdown-item" href="#" data-lang="kn">ಕನ್ನಡ (Kannada)</a></li>
+                            <li><a class="dropdown-item" href="#" data-lang="hi">हिंदी (Hindi)</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero-section">
+        <div class="hero-text">
+            <h1>Soil Classification and Crop Recommendation</h1>
+        </div>
+    </section>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <i class="fas fa-spinner fa-spin loading-spinner"></i>
+    </div>
+
+    <!-- About Section -->
+    <section id="about" class="section">
+        <h2>About</h2>
+        <div class="card">
+            <p>Welcome to the Soil & Crop Analysis System! This tool leverages advanced machine learning to classify soil types from images and recommend the best crops based on soil parameters. Our mission is to assist farmers and agronomists in making informed decisions for sustainable agriculture.</p>
+        </div>
+    </section>
+
+    <!-- Prediction Section -->
+    <section id="prediction" class="section">
+        <div class="card">
+            <div class="card-header">
+                <h4 class="mb-0">Analyze Your Soil</h4>
+            </div>
+            <div class="card-body">
+                <form id="predictionForm" enctype="multipart/form-data" method="POST" action="/predict">
+                    <div class="mb-4">
+                        <label for="soil_image" class="form-label">
+                            <i class="fas fa-camera me-2"></i>Upload Soil Image
+                        </label>
+                        <input type="file" class="form-control" id="soil_image" name="soil_image" required accept="image/*">
+                        <div id="imagePreview" class="mt-2"></div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-flask"></i></span>
+                                <input type="number" step="0.01" class="form-control" id="nitrogen" name="nitrogen" placeholder="Nitrogen (N)" required min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-flask"></i></span>
+                                <input type="number" step="0.01" class="form-control" id="phosphorus" name="phosphorus" placeholder="Phosphorus (P)" required min="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-flask"></i></span>
+                                <input type="number" step="0.01" class="form-control" id="potassium" name="potassium" placeholder="Potassium (K)" required min="0">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-thermometer-half"></i></span>
+                                <input type="number" step="0.01" class="form-control" id="temperature" name="temperature" placeholder="Temperature (°C)" required min="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-tint"></i></span>
+                                <input type="number" step="0.01" class="form-control" id="humidity" name="humidity" placeholder="Humidity (%)" required min="0" max="100">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-vial"></i></span>
+                                <input type="number" step="0.01" class="form-control" id="ph" name="ph" placeholder="pH" required min="0" max="14">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-cloud-rain"></i></span>
+                                <input type="number" step="0.01" class="form-control" id="rainfall" name="rainfall" placeholder="Rainfall (mm)" required min="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-3">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-search me-2"></i>Analyze Soil & Get Recommendations
+                        </button>
+                        <button type="button" class="btn btn-secondary" id="resetForm">
+                            <i class="fas fa-undo me-2"></i>Reset
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="predictionResult" class="prediction-result card">
+            <h4 class="mb-4"><i class="fas fa-chart-bar me-2"></i>Analysis Results</h4>
+
+            <div class="result-card">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-microscope me-2"></i>Soil Classification</h5>                    
+                    <span class="badge bg-primary" id="soilConfidenceText"></span>
+
+                    <div id="soilParametersCard"></div>
+
+                </div>
+                <p class="mt-2 mb-1" id="soilType"></p>
+                <div class="confidence-bar">
+                    <div id="soilConfidence" class="confidence-level"></div>
+                </div>
+            </div>
+
+            
+
+            <!-- <div class="result-card">
+                <h5 class="mb-3"><i class="fas fa-info-circle me-2"></i>Soil Parameters</h5>
+                <div class="info-box" id="soilFertilizer"></div>
+                <div class="info-box" id="soilWaterLevel"></div>
+            </div> -->
+            <div class="result-card">
+                <h5 class="mb-3"><i class="fas fa-seedling me-2"></i>Suitable Crops</h5>
+                <div id="cropList"></div>
+
+
+                <div class="card p-3 mt-3">
+                    <h5 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Top 3 Crop Confidence</h5>
+                    <canvas id="cropConfidenceChart" height="200"></canvas>
+                  </div>
+
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Data Section -->
+    <section id="data" class="section">
+        <h2>Data</h2>
+        <div class="card">
+            <h5>Soil Parameters and Typical Ranges</h5>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Typical Range</th>
+                        <th>Unit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Nitrogen (N)</td>
+                        <td>0 - 140</td>
+                        <td>ppm</td>
+                    </tr>
+                    <tr>
+                        <td>Phosphorus (P)</td>
+                        <td>5 - 145</td>
+                        <td>ppm</td>
+                    </tr>
+                    <tr>
+                        <td>Potassium (K)</td>
+                        <td>5 - 205</td>
+                        <td>ppm</td>
+                    </tr>
+                    <tr>
+                        <td>Temperature</td>
+                        <td>8 - 44</td>
+                        <td>°C</td>
+                    </tr>
+                    <tr>
+                        <td>Humidity</td>
+                        <td>14 - 100</td>
+                        <td>%</td>
+                    </tr>
+                    <tr>
+                        <td>pH</td>
+                        <td>3.5 - 9.9</td>
+                        <td>-</td>
+                    </tr>
+                    <tr>
+                        <td>Rainfall</td>
+                        <td>20 - 300</td>
+                        <td>mm</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="section">
+        <h2>Contact Us</h2>
+        <div class="card">
+            <p>Have questions or need support? Reach out to us!</p>
+            <ul class="list-unstyled">
+                <li><i class="fas fa-envelope me-2"></i>Email: <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="26151316160914122615090f0a051409160708070a1f150f154805090b">[email protected]</a></li>
+                <li><i class="fas fa-phone me-2"></i>Phone: +91 9876543210 </li>
+                <li><i class="fas fa-map-marker-alt me-2"></i> KLE Institute of technology Hubballi </li>
+            </ul>
+        </div>
+    </section>
+
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
+    <script>
+        // Translations
+        const translations = {
+            en: { 
+                "home": "Home",
+                "about": "About",
+                "test": "Test",
+                "data": "Data",
+                "contactUs": "Contact Us",
+                "language": "Language",
+                "heroTitle": "Soil Classification and Crop Recommendation",
+                "aboutTitle": "About",
+                "aboutContent": "Welcome to the Soil & Crop Analysis System! This tool leverages advanced machine learning to classify soil types from images and recommend the best crops based on soil parameters. Our mission is to assist farmers and agronomists in making informed decisions for sustainable agriculture.",
+                "analyzeSoil": "Analyze Your Soil",
+                "uploadSoilImage": "Upload Soil Image",
+                "nitrogen": "Nitrogen (N)",
+                "phosphorus": "Phosphorus (P)",
+                "potassium": "Potassium (K)",
+                "temperature": "Temperature (°C)",
+                "humidity": "Humidity (%)",
+                "ph": "pH",
+                "rainfall": "Rainfall (mm)",
+                "analyzeButton": "Analyze Soil & Get Recommendations",
+                "resetButton": "Reset",
+                "analysisResults": "Analysis Results",
+                "soilClassification": "Soil Classification",
+                "suitableCrops": "Suitable Crops",
+                "soilParameters": "Soil Parameters",
+                "fertilizer": "Recommended Fertilizer",
+                "waterLevel": "Water Level Requirement",
+                "dataTitle": "Data",
+                "soilParametersTable": "Soil Parameters and Typical Ranges",
+                "parameter": "Parameter",
+                "typicalRange": "Typical Range",
+                "unit": "Unit",
+                "contactTitle": "Contact Us",
+                "contactMessage": "Have questions or need support? Reach out to us!",
+                "email": "Email: support@soilcropanalysis.com",
+                "phone": "Phone: +1-234-567-890",
+                "address": "Address: 123 Agritech Lane, Farmville"
+
+             },
+            kn: { 
+                
+                "home": "ಮುಖಪುಟ",
+                "about": "ನಮ್ಮ ಬಗ್ಗೆ",
+                "test": "ಪರೀಕ್ಷೆ",
+                "data": "ಮಾಹಿತಿ",
+                "contactUs": "ಸಂಪರ್ಕಿಸಿ",
+                "language": "ಭಾಷೆ",
+                "heroTitle": "ಮಣ್ಣಿನ ವರ್ಗೀಕರಣ ಮತ್ತು ಬೆಳೆ ಶಿಫಾರಸು",
+                "aboutTitle": "ನಮ್ಮ ಬಗ್ಗೆ",
+                "aboutContent": "ಮಣ್ಣು ಮತ್ತು ಬೆಳೆ ವಿಶ್ಲೇಷಣಾ ವ್ಯವಸ್ಥೆಗೆ ಸುಸ್ವಾಗತ! ಈ ಸಾಧನವು ಮಣ್ಣಿನ ಪ್ರಕಾರಗಳನ್ನು ಚಿತ್ರಗಳಿಂದ ವರ್ಗೀಕರಿಸಲು ಮತ್ತು ಮಣ್ಣಿನ ಮಾನದಂಡಗಳ ಆಧಾರದಲ್ಲಿ ಉತ್ತಮ ಬೆಳೆಗಳನ್ನು ಶಿಫಾರಸು ಮಾಡಲು ಸುಧಾರಿತ ಮೆಷಿನ್ ಲರ್ನಿಂಗ್ ಅನ್ನು ಬಳಸುತ್ತದೆ. ಸುಸ್ಥಿರ ಕೃಷಿಗಾಗಿ ರೈತರು ಮತ್ತು ಕೃಷಿ ವಿಜ್ಞಾನಿಗಳಿಗೆ ತಿಳುವಳಿಕೆಯುಳ್ಳ ನಿರ್ಧಾರಗಳನ್ನು ತೆಗೆದುಕೊಳ್ಳಲು ಸಹಾಯ ಮಾಡುವುದು ನಮ್ಮ ಗುರಿಯಾಗಿದೆ.",
+                "analyzeSoil": "ನಿಮ್ಮ ಮಣ್ಣನ್ನು ವಿಶ್ಲೇಷಿಸಿ",
+                "uploadSoilImage": "ಮಣ್ಣಿನ ಚಿತ್ರವನ್ನು ಅಪ್ಲೋಡ್ ಮಾಡಿ",
+                "nitrogen": "ಸಾರಜನಕ (N)",
+                "phosphorus": "ರಂಜಕ (P)",
+                "potassium": "ಪೊಟ್ಯಾಸಿಯಮ್ (K)",
+                "temperature": "ತಾಪಮಾನ (°C)",
+                "humidity": "ಆರ್ದ್ರತೆ (%)",
+                "ph": "pH",
+                "rainfall": "ಮಳೆ (ಮಿಮೀ)",
+                "analyzeButton": "ಮಣ್ಣನ್ನು ವಿಶ್ಲೇಷಿಸಿ ಮತ್ತು ಶಿಫಾರಸುಗಳನ್ನು ಪಡೆಯಿರಿ",
+                "resetButton": "ಮರುಹೊಂದಿಸಿ",
+                "analysisResults": "ವಿಶ್ಲೇಷಣೆ ಫಲಿತಾಂಶಗಳು",
+                "soilClassification": "ಮಣ್ಣಿನ ವರ್ಗೀಕರಣ",
+                "suitableCrops": "ಸೂಕ್ತವಾದ ಬೆಳೆಗಳು",
+                "soilParameters": "ಮಣ್ಣಿನ ಮಾನದಂಡಗಳು",
+                "fertilizer": "ಶಿಫಾರಸು ಮಾಡಲಾದ ಗೊಬ್ಬರ",
+                "waterLevel": "ನೀರಿನ ಮಟ್ಟದ ಅವಶ್ಯಕತೆ",
+                "dataTitle": "ಮಾಹಿತಿ",
+                "soilParametersTable": "ಮಣ್ಣಿನ ಮಾನದಂಡಗಳು ಮತ್ತು ಸಾಮಾನ್ಯ ವ್ಯಾಪ್ತಿಗಳು",
+                "parameter": "ಮಾನದಂಡ",
+                "typicalRange": "ಸಾಮಾನ್ಯ ವ್ಯಾಪ್ತಿ",
+                "unit": "ಘಟಕ",
+                "contactTitle": "ಸಂಪರ್ಕಿಸಿ",
+                "contactMessage": "ಪ್ರಶ್ನೆಗಳಿವೆಯೇ ಅಥವಾ ಬೆಂಬಲ ಬೇಕೇ? ನಮ್ಮನ್ನು ಸಂಪರ್ಕಿಸಿ!",
+                "email": "ಇಮೇಲ್: support@soilcropanalysis.com",
+                "phone": "ಫೋನ್: +1-234-567-890",
+                "address": "ವಿಳಾಸ: 123 ಕೃಷಿ ತಂತ್ರಜ್ಞಾನ ಲೇನ್, ಫಾರ್ಮ್ವಿಲ್"
+
+             },
+            hi: { 
+                "home": "होम",
+                "about": "हमारे बारे में",
+                "test": "परीक्षण",
+                "data": "डेटा",
+                "contactUs": "संपर्क करें",
+                "language": "भाषा",
+                "heroTitle": "मिट्टी वर्गीकरण और फसल अनुशंसा",
+                "aboutTitle": "हमारे बारे में",
+                "aboutContent": "मिट्टी और फसल विश्लेषण प्रणाली में आपका स्वागत है! यह उपकरण छवियों से मिट्टी के प्रकारों को वर्गीकृत करने और मिट्टी के मापदंडों के आधार पर सर्वोत्तम फसलों की सिफारिश करने के लिए उन्नत मशीन लर्निंग का लाभ उठाता है। हमारा मिशन टिकाऊ कृषि के लिए सूचित निर्णय लेने में किसानों और कृषि वैज्ञानिकों की सहायता करना है।",
+                "analyzeSoil": "अपनी मिट्टी का विश्लेषण करें",
+                "uploadSoilImage": "मिट्टी की छवि अपलोड करें",
+                "nitrogen": "नाइट्रोजन (N)",
+                "phosphorus": "फास्फोरस (P)",
+                "potassium": "पोटैशियम (K)",
+                "temperature": "तापमान (°C)",
+                "humidity": "आर्द्रता (%)",
+                "ph": "pH",
+                "rainfall": "वर्षा (मिमी)",
+                "analyzeButton": "मिट्टी का विश्लेषण करें और सिफारिशें प्राप्त करें",
+                "resetButton": "रीसेट",
+                "analysisResults": "विश्लेषण परिणाम",
+                "soilClassification": "मिट्टी वर्गीकरण",
+                "suitableCrops": "उपयुक्त फसलें",
+                "soilParameters": "मिट्टी के मापदंड",
+                "fertilizer": "अनुशंसित उर्वरक",
+                "waterLevel": "जल स्तर की आवश्यकता",
+                "dataTitle": "डेटा",
+                "soilParametersTable": "मिट्टी के मापदंड और विशिष्ट सीमाएँ",
+                "parameter": "मापदंड",
+                "typicalRange": "विशिष्ट सीमा",
+                "unit": "इकाई",
+                "contactTitle": "संपर्क करें",
+                "contactMessage": "प्रश्न या सहायता की आवश्यकता है? हमसे संपर्क करें!",
+                "email": "ईमेल: support@soilcropanalysis.com",
+                "phone": "फोन: +1-234-567-890",
+                "address": "पता: 123 एग्रीटेक लेन, फार्मविल"
+
+             }
+        };
+    
+        const navbarLinks = document.querySelectorAll('.nav-link');
+const predictionForm = document.getElementById('predictionForm');
+const soilImage = document.getElementById('soil_image');
+const imagePreview = document.getElementById('imagePreview');
+const predictionResult = document.getElementById('predictionResult');
+const loadingOverlay = document.getElementById('loadingOverlay');
+const resetFormButton = document.getElementById('resetForm');
+const soilType = document.getElementById('soilType');
+const soilConfidenceText = document.getElementById('soilConfidenceText');
+const soilConfidence = document.getElementById('soilConfidence');
+const cropList = document.getElementById('cropList');
+const languageLinks = document.querySelectorAll('.dropdown-item[data-lang]');
+
+let currentLang = localStorage.getItem('selectedLanguage') || 'en';
+let cropChart = null; // For Chart.js instance
+
+function updateLanguage(lang) {
+    currentLang = lang;
+    localStorage.setItem('selectedLanguage', lang);
+    // Update navbar and all text labels
+    const t = translations[lang];
+    document.querySelector('.nav-link[href="#home"]').textContent = t.home;
+    document.querySelector('.nav-link[href="#about"]').textContent = t.about;
+    document.querySelector('.nav-link[href="#prediction"]').textContent = t.test;
+    document.querySelector('.nav-link[href="#data"]').textContent = t.data;
+    document.querySelector('.nav-link[href="#contact"]').textContent = t.contactUs;
+    document.querySelector('#languageDropdown').innerHTML = `<i class="fas fa-language me-1"></i> ${t.language}`;
+    document.querySelector('.hero-text h1').textContent = t.heroTitle;
+    document.querySelector('#about h2').textContent = t.aboutTitle;
+    document.querySelector('#about .card p').textContent = t.aboutContent;
+    document.querySelector('.card-header h4').textContent = t.analyzeSoil;
+    document.querySelector('label[for="soil_image"]').innerHTML = `<i class="fas fa-camera me-2"></i>${t.uploadSoilImage}`;
+    document.querySelector('#nitrogen').placeholder = t.nitrogen;
+    document.querySelector('#phosphorus').placeholder = t.phosphorus;
+    document.querySelector('#potassium').placeholder = t.potassium;
+    document.querySelector('#temperature').placeholder = t.temperature;
+    document.querySelector('#humidity').placeholder = t.humidity;
+    document.querySelector('#ph').placeholder = t.ph;
+    document.querySelector('#rainfall').placeholder = t.rainfall;
+    document.querySelector('button[type="submit"]').innerHTML = `<i class="fas fa-search me-2"></i>${t.analyzeButton}`;
+    document.querySelector('#resetForm').innerHTML = `<i class="fas fa-undo me-2"></i>${t.resetButton}`;
+    document.querySelector('#predictionResult h4').innerHTML = `<i class="fas fa-chart-bar me-2"></i>${t.analysisResults}`;
+}
+
+languageLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const lang = e.target.getAttribute('data-lang');
+        updateLanguage(lang);
+    });
+});
+
+updateLanguage(currentLang);
+
+navbarLinks.forEach(link => {
+    link.addEventListener('click', (e) => {
+        e.preventDefault();
+        const targetId = link.getAttribute('href').substring(1);
+        const targetSection = document.getElementById(targetId);
+        if (targetSection) smoothScroll(targetSection, 800);
+    });
+});
+
+function smoothScroll(target, duration) {
+    const start = window.pageYOffset;
+    const distance = target.offsetTop - 70 - start;
+    let startTime = performance.now();
+    function step(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeProgress = easeInOutQuad(progress);
+        window.scrollTo(0, start + distance * easeProgress);
+        if (progress < 1) requestAnimationFrame(step);
+    }
+    function easeInOutQuad(t) {
+        return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    }
+    requestAnimationFrame(step);
+}
+
+soilImage.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            imagePreview.innerHTML = `<img src="${event.target.result}" class="img-fluid" alt="Soil Sample">`;
+        };
+        reader.readAsDataURL(file);
+    }
+});
+
+predictionForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loadingOverlay.style.display = 'flex';
+    predictionResult.style.display = 'none';
+
+    const formData = new FormData(predictionForm);
+    formData.append('lang', currentLang);
+
+    try {
+        const response = await fetch('/predict', { method: 'POST', body: formData });
+        const data = await response.json();
+
+
+        if (data.is_soil === false) {
+            loadingOverlay.style.display = 'none';
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-warning alert-dismissible fade show';
+            errorDiv.innerHTML = `
+                <strong><i class="fas fa-exclamation-triangle me-2"></i>${data.message}</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            predictionForm.insertBefore(errorDiv, predictionForm.firstChild);
+            return;
+        }
+
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Prediction failed');
+        }
+
+        // Remove any existing error messages
+        const existingAlert = predictionForm.querySelector('.alert');
+        if (existingAlert) {
+            existingAlert.remove();
+        }
+
+        soilType.textContent = data.soil_type;
+        soilConfidenceText.textContent = data.soil_confidence;
+        soilConfidence.style.width = data.soil_confidence;
+
+        // Show entered soil parameters
+        const soilParamsHtml = `
+            <div class="card p-3 mb-3">
+                <h5 class="mb-3">Entered Soil Parameters:</h5>
+                <ul class="list-unstyled mb-0">
+                    <li><strong>Nitrogen (N):</strong> ${formData.get('nitrogen')}</li>
+                    <li><strong>Phosphorus (P):</strong> ${formData.get('phosphorus')}</li>
+                    <li><strong>Potassium (K):</strong> ${formData.get('potassium')}</li>
+                    <li><strong>Temperature (C):</strong> ${formData.get('temperature')}</li>
+                    <li><strong>Humidity (%):</strong> ${formData.get('humidity')}</li>
+                    <li><strong>pH:</strong> ${formData.get('ph')}</li>
+                    <li><strong>Rainfall (mm):</strong> ${formData.get('rainfall')}</li>
+                </ul>
+            </div>`;
+        document.getElementById('soilParametersCard').innerHTML = soilParamsHtml;
+
+        // Suitable Crops
+        let cropHtml = '';
+        let chartLabels = [];
+        let chartData = [];
+
+        data.suitable_crops.forEach((crop, index) => {
+            const highlight = index === 0 ? 'highlight-crop' : '';
+            cropHtml += `
+                <div class="result-card mb-3 ${highlight}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">${crop.crop}</h5>
+                        <span class="badge bg-success">${crop.confidence}</span>
+                    </div>
+                    <div class="mt-2">
+                        <p class="mb-1"><strong>Water Requirement:</strong> ${crop.water_info}</p>
+                        <p class="mb-1"><strong>Growing Months:</strong> ${crop.growing_months}</p>
+                    </div>
+                    <div class="confidence-bar mt-2">
+                        <div class="confidence-level" style="width: ${crop.confidence};"></div>
+                    </div>
+                </div>`;
+            chartLabels.push(crop.crop);
+            chartData.push(parseFloat(crop.confidence));
+        });
+
+        cropList.innerHTML = cropHtml;
+
+       // Update Chart
+            if (cropChart) cropChart.destroy();
+            const ctx = document.getElementById('cropConfidenceChart').getContext('2d');
+
+            const fixedData = data.suitable_crops.map(crop => {
+            let conf = parseFloat(crop.confidence.toString().replace('%', ''));
+            if (conf <= 1) conf *= 100;
+            return {
+                label: crop.crop,
+                confidence: parseFloat(conf.toFixed(2))
+            };
+            });
+
+            cropChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: fixedData.map(c => c.label),
+                datasets: [{
+                label: 'Confidence %',
+                data: fixedData.map(c => c.confidence),
+                backgroundColor: ['#4CAF50', '#03A9F4', '#FFC107'],
+                borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    title: {
+                    display: true,
+                    text: 'Confidence %'
+                    }
+                }
+                },
+                plugins: {
+                legend: { display: false }
+                }
+            }
+            });
+
+
+        predictionResult.style.display = 'block';
+        loadingOverlay.style.display = 'none';
+        smoothScroll(predictionResult, 800);
+
+    } catch (error) {
+        console.error('Prediction failed:', error);
+        loadingOverlay.style.display = 'none';
+        alert(error.message || 'Prediction Failed!');
+    }
+});
+
+resetFormButton.addEventListener('click', () => {
+    predictionForm.reset();
+    imagePreview.innerHTML = '';
+    predictionResult.style.display = 'none';
+});
+    </script>
+
+    
+    <!-- Bootstrap JS and Popper.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js"></script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'935e4480cd8b53d4',t:'MTc0NTU4ODU4Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
